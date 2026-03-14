@@ -12,6 +12,87 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
+func TestSplitOptions(t *testing.T) {
+
+	t.Run("MaxOutOfRangeDefaultsTo255", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 256, Linear: false}
+		out, err := Split(secret, 5, 3, opts)
+		assert.Nil(err, "split error")
+		assert.Equal(5, len(out), "wrong parts count")
+
+		for _, share := range out {
+			assert.Equal(len(secret)+ShareOverhead, len(share), "share is too large")
+			assert.LessOrEqual(share[len(share)-1], byte(255), "share index out of range")
+			assert.GreaterOrEqual(share[len(share)-1], byte(1), "share index out of range")
+		}
+	})
+
+	t.Run("MaxOutOfRangeDefaultsTo255WithMax1", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 1, Linear: false}
+		out, err := Split(secret, 5, 3, opts)
+		assert.Nil(err, "split error")
+		assert.Equal(5, len(out), "wrong parts count")
+
+		for _, share := range out {
+			assert.Equal(len(secret)+ShareOverhead, len(share), "share is too large")
+			assert.LessOrEqual(share[len(share)-1], byte(255), "share index out of range")
+			assert.GreaterOrEqual(share[len(share)-1], byte(1), "share index out of range")
+		}
+	})
+
+	t.Run("MaxInRangeLimitedTo10", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 10, Linear: false}
+		out, err := Split(secret, 5, 3, opts)
+		assert.Nil(err, "split error")
+		assert.Equal(5, len(out), "wrong parts count")
+		for _, share := range out {
+			assert.Equal(len(secret)+ShareOverhead, len(share), "share is too large")
+			assert.LessOrEqual(share[len(share)-1], byte(opts.Limit), "share index out of range")
+			assert.GreaterOrEqual(share[len(share)-1], byte(1), "share index out of range")
+		}
+	})
+
+	t.Run("LinearXCoordinatesWithoutLimit", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 0, Linear: true}
+		out, err := Split(secret, 5, 3, opts)
+		assert.Nil(err, "split error")
+		assert.Equal(5, len(out), "wrong parts count")
+		for index, share := range out {
+			assert.Equal(len(secret)+ShareOverhead, len(share), "share is too large")
+			assert.Equal(byte(index+1), share[len(share)-1], "share index mismatch")
+		}
+	})
+
+	t.Run("LinearXCoordinatesWithLimitGreaterThanParts", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 10, Linear: true}
+		out, err := Split(secret, 5, 3, opts)
+		assert.Nil(err, "split error")
+		assert.Equal(5, len(out), "wrong parts count")
+		for index, share := range out {
+			assert.Equal(len(secret)+ShareOverhead, len(share), "share is too large")
+			assert.Equal(byte(index+1), share[len(share)-1], "share index mismatch")
+		}
+	})
+
+	t.Run("LinearXCoordinatesWithLimitLessThanParts", func(t *testing.T) {
+		assert := tdd.New(t)
+		secret := []byte("test")
+		opts := SplitOptions{Limit: 2, Linear: true}
+		_, err := Split(secret, 5, 3, opts)
+		assert.NotNil(err, "split error")
+	})
+}
+
 func TestSplit(t *testing.T) {
 	assert := tdd.New(t)
 	t.Run("Invalid", func(t *testing.T) {

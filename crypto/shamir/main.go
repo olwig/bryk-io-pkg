@@ -2,6 +2,7 @@ package shamir
 
 import (
 	"math/rand"
+	"strconv"
 
 	"go.bryk.io/pkg/errors"
 )
@@ -13,31 +14,66 @@ const (
 	ShareOverhead = 1
 )
 
+// SplitOptions allows for configuration of the Split function.
+// It can be used to set the maximum value for x coordinates and whether
+// the x coordinates should be linear or random. The default maximum is 255,
+// and the default is to use random x coordinates.
+// Limit  which is not in the range of 2 to 255 will be set to 255.
+// If linear is true, the x coordinates will be 1, 2, ..., max instead of random.
+// Limit limits the maximum value for x coordinates, which must be at least 2 and at most 255.
+// Possible use case: restricting the coordinate range when the index size
+// is limited, e.g. a binary protocol where the index is only 4 bits.
+type SplitOptions struct {
+	Limit  int
+	Linear bool
+}
+
 // Split takes an arbitrarily long secret and generates a `parts` number
 // of shares, `threshold` of which are required to reconstruct the secret.
 // The parts and threshold must be at least 2, and less than 256. The returned
 // shares are each one byte longer than the secret as they attach a tag used
 // to reconstruct the secret.
-func Split(secret []byte, parts, threshold int) ([][]byte, error) {
+// The `opts` parameter can be used to configure the maximum value for x coordinates
+// and whether the x coordinates should be linear or random. See SplitOptions for details.
+// Possible use case: restricting the coordinate range when the index size
+// is limited, e.g. a binary protocol where the index is only 4 bits.
+func Split(secret []byte, parts, threshold int, opts ...SplitOptions) ([][]byte, error) {
+
+	maxX, linearX := 255, false
+	if len(opts) > 0 {
+		if lim := opts[0].Limit; lim >= 2 && lim <= maxX {
+			maxX = lim
+		}
+		linearX = opts[0].Linear
+	}
+
 	// Sanity check the input
 	if parts < threshold {
 		return nil, errors.New("parts cannot be less than threshold")
 	}
-	if parts > 255 {
-		return nil, errors.New("parts cannot exceed 255")
+	if parts > maxX {
+		return nil, errors.New("parts cannot exceed the maximum value of " + strconv.Itoa(maxX))
 	}
 	if threshold < 2 {
 		return nil, errors.New("threshold must be at least 2")
 	}
-	if threshold > 255 {
-		return nil, errors.New("threshold cannot exceed 255")
+	if threshold > maxX {
+		return nil, errors.New("threshold cannot exceed " + strconv.Itoa(maxX))
 	}
 	if len(secret) == 0 {
 		return nil, errors.New("cannot split an empty secret")
 	}
 
-	// Generate random list of x coordinates
-	xCoordinates := rand.Perm(255)
+	// Generate list of x coordinates linear/random and limited to maxX.
+	var xCoordinates []int
+	if !linearX {
+		xCoordinates = rand.Perm(maxX)
+	} else {
+		xCoordinates = make([]int, maxX)
+		for i := range xCoordinates {
+			xCoordinates[i] = i
+		}
+	}
 
 	// Allocate the output array, initialize the final byte
 	// of the output with the offset. The representation of each
